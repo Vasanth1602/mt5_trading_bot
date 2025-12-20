@@ -23,25 +23,64 @@ def compute_volatility_slope(volatility_series, window=5):
 
 def compute_autocorrelation(returns, lag=1):
     """Calculates rolling autocorrelation."""
-    # Rolling correlation of returns with lagged returns
     return returns.rolling(window=20).corr(returns.shift(lag))
 
-def compute_half_life(series):
+def compute_hurst(series, lags=[2, 20]):
     """
-    Calculates Half-Life of Mean Reversion using Ornstein-Uhlenbeck process.
-    Note: Can be slow on large datasets.
+    Calculates the Hurst Exponent to determine market regime.
+    H < 0.5: Mean Reverting
+    H ~ 0.5: Random Walk
+    H > 0.5: Trending
+    
+    Using a simplified RS Analysis or variance ratio approximation for speed.
     """
-    # Simplified approximation for rolling window usage
-    # Real implementation requires regression on lag
-    # This is a placeholder for a heavy computation
-    return 25 # Dummy value to pass checks if speed is concern, else implement full OLS
+    # Simplified Rolling Hurst (Variance Ratio method for efficiency)
+    # H = log(RS) / log(n) approx
+    
+    # We will use a trusted scalar implementation that can be rolled
+    # For a rolling pandas series, this is slow.
+    # Optimization: Function to be applied on rolling window.
+    
+    # Placeholder for efficient implementation:
+    # Use standard deviation of differences vs standard deviation of series
+    
+    # Efficient approximation:
+    # H ~ 0.5 is random.
+    # This function expects a Series and returns a Series (Rolling)
+    
+    def get_hurst_scalar(ts):
+        if len(ts) < 20: return 0.5
+        lags_range = range(2, 20)
+        tau = [np.std(np.subtract(ts[lag:], ts[:-lag])) for lag in lags_range]
+        if min(tau) == 0: return 0.5 # Prevent log(0)
+        
+        # polyfit(log(lags), log(tau), 1)[0] returns H
+        try:
+            m = np.polyfit(np.log(lags_range), np.log(tau), 1)
+            return m[0]
+        except:
+            return 0.5
+
+    # Apply rolling (Slow but accurate enough for M5)
+    return series.rolling(100).apply(get_hurst_scalar, raw=True)
+
+def compute_rsi(series, period=14):
+    """
+    Calculates RSI (Relative Strength Index).
+    """
+    delta = series.diff()
+    gain = (delta.where(delta > 0, 0)).fillna(0)
+    loss = (-delta.where(delta < 0, 0)).fillna(0)
+    
+    # Wilder's Smoothing
+    avg_gain = gain.ewm(alpha=1/period, min_periods=period).mean()
+    avg_loss = loss.ewm(alpha=1/period, min_periods=period).mean()
+    
+    rs = avg_gain / avg_loss
+    return 100 - (100 / (1 + rs))
 
 def compute_wick_body_ratio(df):
-    """
-    Calculates Wick to Body Ratio.
-    High Ratio = Rejection/Indecision.
-    """
     body = (df['close'] - df['open']).abs()
     range_total = df['high'] - df['low']
-    ratio = (range_total - body) / body.replace(0, 0.00001) # Avoid div by zero
+    ratio = (range_total - body) / body.replace(0, 0.00001) 
     return ratio

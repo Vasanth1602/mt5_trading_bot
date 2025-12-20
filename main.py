@@ -18,7 +18,9 @@ with open("config/settings.yaml", "r") as f:
     CONFIG = yaml.safe_load(f)
 
 SYMBOL = CONFIG['trading']['symbol']
-TIMEFRAME = mt5.TIMEFRAME_M5
+# Map Config String to MT5 Constant
+TF_MAP = {"M1": mt5.TIMEFRAME_M1, "M5": mt5.TIMEFRAME_M5, "M15": mt5.TIMEFRAME_M15, "H1": mt5.TIMEFRAME_H1}
+TIMEFRAME = TF_MAP.get(CONFIG['trading']['timeframe'], mt5.TIMEFRAME_M15)
 MAGIC = CONFIG['project']['magic_number']
 
 logger = setup_logger("Main")

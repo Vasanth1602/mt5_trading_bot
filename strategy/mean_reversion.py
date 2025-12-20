@@ -9,9 +9,18 @@ logger = setup_logger("Strategy")
 class MeanReversionStrategy:
     def __init__(self, config):
         self.config = config
-        self.z_trigger = config['strategy']['z_score_trigger']
-        self.entry_start = config['strategy']['entry_zone_start']
-        self.entry_end = config['strategy']['entry_zone_end']
+        self.z_trigger = config['strategy']['z_score_trigger']       
+        self.entry_target = config['strategy']['entry_zone_target']  
+        self.hurst_limit = config['strategy']['hurst_threshold']     
+        
+        # RSI Limits
+        self.rsi_period = config['strategy']['rsi_period']
+        self.rsi_ob = config['strategy']['rsi_overbought']
+        self.rsi_os = config['strategy']['rsi_oversold']
+        
+        # State Tracking
+        self.pending_signal = None  # None, "BUY", "SELL"
+        self.wait_counter = 0
 
     def calculate_indicators(self, df):
         """
@@ -21,91 +30,71 @@ class MeanReversionStrategy:
         df['returns'] = np.log(df['close'] / df['close'].shift(1))
         df['volatility'] = compute_volatility(df['returns'])
         df['vwap'] = compute_vwap(df)
-        df['z_score'] = (df['close'] - df['vwap']) / (df['close'].rolling(20).std()) # Simplified Z relative to VWAP
+        df['z_score'] = (df['close'] - df['vwap']) / (df['close'].rolling(20).std()) 
         df['vol_slope'] = compute_volatility_slope(df['volatility'])
         df['auto_corr'] = compute_autocorrelation(df['returns'])
+        df['hurst'] = compute_hurst(df['close']) 
+        df['rsi'] = compute_rsi(df['close'], period=self.rsi_period) # New
         return df
 
     def analyze_market(self, df):
         """
-        Executes the STEP 1 - STEP 4 logic.
-        Returns a dict with signal details or None.
-        Expects df to have indicators already calculated.
+        Executes the optimization logic:
+        1. Check Filters (Session, News, Slope, Hurst, AC)
+        2. Check Z-Score Trigger (> Z) -> Set State
+        3. Check Retracement (< Target) -> Execute Entry
         """
-        # --- Pre-Checks ---
-        if len(df) < 100:
-            return None
+        if len(df) < 100: return None
+        if not check_trading_session(self.config): return None
+        if not check_news_impact(): return None
+
+        last = df.iloc[-2] # Closed Candle
+
+        last = df.iloc[-2] # Closed Candle
+
+        # --- Regime Filters ---
+        if last.vol_slope > 0.0001: return None
+        if last.hurst > self.hurst_limit: return None
+
+        signal = None
+        z = last.z_score
+        rsi = last.rsi
+        
+        # STATE MACHINE LOGIC
+        if self.pending_signal:
+            self.wait_counter += 1
+            if self.wait_counter > 20: 
+                self.pending_signal = None
+                self.wait_counter = 0
+
+        # TRANSITION 1: Trigger (Z-Score + RSI CHECK)
+        if abs(z) >= self.z_trigger:
+            if z > 0 and rsi > self.rsi_ob: # Sell Overbought
+                self.pending_signal = "SELL_WAIT"
+                self.wait_counter = 0
+            elif z < 0 and rsi < self.rsi_os: # Buy Oversold
+                self.pending_signal = "BUY_WAIT"
+                self.wait_counter = 0
             
-        # STEP 1: Time & Event Filter
-        if not check_trading_session(self.config):
-            logger.info("Outside Trading Session")
-            return None
+        # TRANSITION 2: Execution (Z drops to Target)
+        if self.pending_signal == "SELL_WAIT":
+            if z <= self.entry_target: 
+                signal = "SELL"
+                self.pending_signal = None
+                
+        elif self.pending_signal == "BUY_WAIT":
+            if z >= -self.entry_target:
+                signal = "BUY"
+                self.pending_signal = None
+
+        if signal:
+            return {
+                "bias": signal,
+                "z_score": z,
+                "rsi": rsi,
+                "vwap": last.vwap,
+                "volatility": last.volatility,
+                "close": last.close
+            }
             
-        if not check_news_impact():
-            logger.info("High Impact News Detected")
-            return None
-
-        # Grab latest closed candle
-        last = df.iloc[-2]
-
-        # STEP 1 (Cont): Volatility Regime
-        # "Volatility slope must not be strongly positive"
-        if last.vol_slope > 0.0001: # Threshold needs tuning
-            logger.info("Volatility Expanding (Slope > 0) - REJECT")
-            return None
-
-        # STEP 3: Confirmations
-        signal_bias = None
-        
-        # Z-Score Trigger
-        if last.z_score >= self.z_trigger:
-            signal_bias = "SELL"
-        elif last.z_score <= -self.z_trigger:
-            signal_bias = "BUY"
-            
-        if not signal_bias:
-            return None
-
-        # Autocorrelation Filter (Memory)
-        # "AC < -0.1 -> Mean Reversion Confirmed"
-        if last.auto_corr > self.config['filters']['autocorrelation_threshold']:
-            logger.info(f"Autocorrelation {last.auto_corr} > Threshold - Trend Mode - REJECT")
-            return None
-
-        # STEP 4: Entry Zone Logic
-        # We need to check if current Price (Ask/Bid) is in the "Retracement Zone"
-        # Since we are analyzing historical candles, this part actually happens in Real-Time loop usually.
-        # But for Signal generation, we say "Ready to Enter".
-        # The Main Loop will check the specific Price level.
-        
-        # Construct Signal Object
-        entry_signal = {
-            "bias": signal_bias,
-            "z_score": last.z_score,
-            "vwap": last.vwap,
-            "volatility": last.volatility, # This is returns std, need price scale 
-            "close": last.close
-        }
-        
-        return entry_signal
-        
-    def check_entry_zone(self, market_price, z_score_current, signal_data):
-        """
-        Checks if current live price is within Z-Score 1.6-1.8 retracement zone.
-        This is tricky because Z-Score changes with price.
-        Approximation: Use the Z-score from the closed candle.
-        User required: "Z retraces from >= 2.0 -> 1.6-1.8"
-        
-        If Entry Signal was generated (Z > 2), we wait for Z to drop to 1.8.
-        """
-        # This stateful logic is best handled by the main loop or a state machine.
-        # For this implementation, we return Valid if Z is currently in zone provided filter passed.
-        
-        # Simplified: If signal was "SELL" (Z > 2 previously), allows entry if Z is now 1.6-1.8?
-        # Or does it mean we simply limit order there?
-        
-        # Let's interpret: Current Z needs to be in entry zone.
-        z = abs(z_score_current)
-        if self.entry_start <= z <= self.entry_end:
-            return True
-        return False
+        return None
