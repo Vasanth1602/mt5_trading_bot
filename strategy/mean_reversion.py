@@ -29,7 +29,12 @@ class MeanReversionStrategy:
         df = df.copy()
         df['returns'] = np.log(df['close'] / df['close'].shift(1))
         df['volatility'] = compute_volatility(df['returns'])
-        df['vwap'] = compute_vwap(df)
+        # Use configured window (e.g. 20) for Rolling VWAP matching Z-Score window
+        vwap_win = self.config['strategy'].get('vwap_window', 20)
+        df['vwap'] = compute_vwap(df, window=vwap_win)
+        
+        # Z-Score: (Close - VWAP) / Rolling STD
+        # Note: If VWAP is length 20, and STD is length 20, Z-Score is consistent.
         df['z_score'] = (df['close'] - df['vwap']) / (df['close'].rolling(20).std()) 
         df['vol_slope'] = compute_volatility_slope(df['volatility'])
         df['auto_corr'] = compute_autocorrelation(df['returns'])

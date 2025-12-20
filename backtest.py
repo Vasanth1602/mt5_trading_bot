@@ -14,7 +14,7 @@ with open("config/settings.yaml", "r") as f:
     CONFIG = yaml.safe_load(f)
 
 SYMBOL = CONFIG['trading']['symbol']
-BARS = 10000 
+BARS = 50000
 
 def run_backtest():
     print(f"🚀 Starting Optimized Backtest (RSI+AC) for {SYMBOL} ({BARS} bars)...")
@@ -56,11 +56,58 @@ def run_backtest():
     RSI_OB = CONFIG['strategy']['rsi_overbought']
     RSI_OS = CONFIG['strategy']['rsi_oversold']
 
+    # Session Times (Hours)
+    asian_start = int(CONFIG['sessions']['asian_start'].split(":")[0])
+    asian_end = int(CONFIG['sessions']['asian_end'].split(":")[0])
+    lon_start = int(CONFIG['sessions']['london_mid_start'].split(":")[0])
+    lon_end = int(CONFIG['sessions']['london_mid_end'].split(":")[0])
+
     print(f"⚙️ Config: H<{HURST_LIMIT}, Z>{Z_TRIGGER}, RSI, R:R={CONFIG['trading']['risk_reward_ratio']}")
+    print(f"🌍 Sessions: Asian({asian_start}-{asian_end}) | London({lon_start}-{lon_end})")
+
+
+    # Drawdown Tracking
+    current_day = None
+    daily_start_balance = balance
+    total_start_balance = balance # Baseline for Total Drawdown
+    max_dd_pct = CONFIG['trading']['max_daily_drawdown_pct']
 
     for i in range(100, len(df)):
         current_candle = df.iloc[i]
         prev_candle = df.iloc[i-1] 
+        current_time = current_candle['time']
+
+        # Daily Reset
+        if current_day != current_time.day:
+            current_day = current_time.day
+            daily_start_balance = balance
+            # print(f"📅 New Day: {current_time.date()} | Start Bal: ${daily_start_balance:.2f}")
+
+        # Check Daily Drawdown
+        current_dd = (daily_start_balance - balance) / daily_start_balance
+        if current_dd >= max_dd_pct:
+            # Skip trading for rest of day
+            continue
+        
+        # Check Total Drawdown
+        current_total_dd = (total_start_balance - balance) / total_start_balance
+        if current_total_dd >= CONFIG['trading']['max_total_drawdown_pct']:
+            print(f"💀 Max Total Drawdown Reached ({current_total_dd*100:.1f}%)! Balance: ${balance:.2f}")
+            user_response = input("Continue trading with new baseline? (y/n): ")
+            if user_response.lower() == 'y':
+                total_start_balance = balance
+                print(f"🔄 Resuming. New Drawdown Baseline: ${total_start_balance:.2f}")
+            else:
+                print("Stopping Backtest.")
+                break
+        
+        # 1. Session Filter
+        hour = current_time.hour
+        is_asian = asian_start <= hour < asian_end
+        is_london = lon_start <= hour < lon_end
+        
+        if not (is_asian or is_london):
+            pending_signal = None; wait_counter = 0; continue
         
         # --- PnL Calc ---
         active_positions = []
@@ -85,6 +132,8 @@ def run_backtest():
             
             if closed:
                 balance += pnl
+                res = "WIN" if pnl > 0 else "LOSS"
+                print(f"🏁 {res} ({reason}) | Time: {current_candle['time']} | PnL: ${pnl:.2f} | Bal: ${balance:.2f}")
                 history.append({'time': current_candle['time'], 'pnl': pnl, 'reason': reason})
             else:
                 active_positions.append(pos)
@@ -138,6 +187,8 @@ def run_backtest():
             lots = calculate_position_size(balance, 0.01, sl_dist, SYMBOL)
             
             if lots > 0:
+                # current_time is defined at start of loop: current_time = current_candle['time']
+                print(f"💰 {signal} Executed at {current_time} | Price: {price:.5f} | SL: {sl:.5f} | TP: {tp:.5f}")
                 positions.append({
                     'type': signal, 'price': price, 'sl': sl, 'tp': tp, 'lots': lots
                 })

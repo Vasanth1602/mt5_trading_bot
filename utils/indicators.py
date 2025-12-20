@@ -1,11 +1,14 @@
 import numpy as np
 import pandas as pd
 
-def compute_vwap(df):
-    """Calculates Volume Weighted Average Price."""
+def compute_vwap(df, window=20):
+    """Calculates Rolling Volume Weighted Average Price."""
     v = df['tick_volume']
     tp = (df['high'] + df['low'] + df['close']) / 3
-    return (tp * v).cumsum() / v.cumsum()
+    
+    # Rolling VWAP: Sum(TP*V, window) / Sum(V, window)
+    pv = tp * v
+    return pv.rolling(window=window).sum() / v.rolling(window=window).sum()
 
 def compute_zscore(series, window=20):
     """Calculates Z-Score relative to rolling mean and std."""
