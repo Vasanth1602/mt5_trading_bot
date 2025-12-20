@@ -1,0 +1,34 @@
+project:
+  name: "Advanced Mean Reversion Bot"
+  version: "1.0.0"
+  magic_number: 123456
+
+trading:
+  symbol: "EURUSD"
+  timeframe: "M5"  # 5 Minutes
+  risk_per_trade: 0.01  # 1%
+  max_daily_drawdown_pct: 0.03  # 3%
+  max_total_drawdown_pct: 0.10  # 10%
+  risk_reward_ratio: 2.0
+  leverage: 100
+
+strategy:
+  z_score_trigger: 2.0
+  z_score_exit: 0.0  # Mean reversion target
+  volatility_lookback: 20
+  vwap_window: 20
+  entry_zone_start: 1.6
+  entry_zone_end: 1.8
+  
+sessions:
+  asian_start: "00:00"
+  asian_end: "08:00"
+  london_mid_start: "11:00"
+  london_mid_end: "14:00"
+  timezone: "Etc/UTC" # Adjust to broker server time usually
+
+filters:
+  max_spread_pips: 2.0
+  min_volatility_percentile: 0.2
+  max_volatility_percentile: 0.8
+  autocorrelation_threshold: -0.1 # Should be negative for mean reversion
