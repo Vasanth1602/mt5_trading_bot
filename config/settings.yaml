@@ -13,22 +13,22 @@ trading:
   leverage: 100
 
 strategy:
-  z_score_trigger: 1.5
+  z_score_trigger: 2.5
   z_score_exit: 0.0 # Mean reversion target
   volatility_lookback: 20
   vwap_window: 21
-  entry_zone_target: 1.0 # Retracement level
-  hurst_threshold: 0.4
+  entry_zone_target: 1.8 # Retracement level
+  hurst_threshold: 0.45
   rsi_period: 14
   rsi_overbought: 70
   rsi_oversold: 30
 
 sessions:
-  asian_start: "00:00"
-  asian_end: "08:00"
-  london_mid_start: "11:00"
-  london_mid_end: "14:00"
-  timezone: "Etc/UTC" # Adjust to broker server time usually
+  asian_start: "03:00"
+  asian_end: "09:00"
+  london_mid_start: "13:30"
+  london_mid_end: "15:00"
+
 
 filters:
   max_spread_pips: 2.0

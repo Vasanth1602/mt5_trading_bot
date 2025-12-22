@@ -32,3 +32,32 @@ class TradeManager:
                  pass
 
             # Trailing SL or Breakeven logic could go here
+            pass
+
+    def monitor_closed_trades(self):
+        """
+        Checks for recently closed trades and logs them.
+        """
+        from datetime import datetime, timedelta
+        
+        # Check last 5 minutes history
+        from_date = datetime.now() - timedelta(minutes=5)
+        deals = mt5.history_deals_get(from_date, datetime.now(), group="*")
+        
+        if deals:
+            for deal in deals:
+                # Filter for Exit Deals (Entry=0, Exit=1)
+                # Deal Entry In=0, Out=1, In/Out=2
+                if deal.entry == mt5.DEAL_ENTRY_OUT:
+                    # Avoid duplicated logging (naive check: timestamp very recent)
+                    # Ideally track by ticket, but simply logging found deals is OK for low freq.
+                    
+                    # Only log if it happened in last 15 seconds to avoid spam on every loop
+                    deal_time = datetime.fromtimestamp(deal.time)
+                    if (datetime.now() - deal_time).total_seconds() < 15:
+                        res = "WIN" if deal.profit > 0 else "LOSS"
+                        logger.info(
+                            f"🏁 {res} | Ticket: {deal.position_id} | "
+                            f"Price: {deal.price:.5f} | PnL: ${deal.profit:.2f} | "
+                            f"Comment: {deal.comment}"
+                        )
