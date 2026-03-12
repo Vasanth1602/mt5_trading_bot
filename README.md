@@ -1,108 +1,118 @@
-# 🤖 Advanced Mean Reversion MT5 Bot
+# Advanced Mean Reversion MT5 Trading Bot
 
-A professional-grade automated trading system for **MetaTrader 5**, designed for Mean Reversion strategies using statistical arbitrage concepts (Hurst Exponent, Z-Score, Rolling VWAP).
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)
+![Platform](https://img.shields.io/badge/platform-MetaTrader5-green.svg)
 
-> **Status**: Production Ready ✅
-> **Live/Backtest Parity**: 100% Verified (Identical Logic)
-
----
+A professional-grade, fully automated trading bot designed for MetaTrader 5 (MT5). This system implements a sophisticated Mean Reversion strategy, leveraging statistical indicators like Z-Score, Hurst Exponent, and Volatility adjustments to identify high-probability reversal points. It features robust risk management, session filtering, and a modular architecture.
 
 ## 🚀 Key Features
 
-### 🧠 Intelligent Strategy
-*   **Hurst Exponent Filter**: Trades *only* when the market is in a "Mean Reverting" regime (Hurst < 0.45). Avoids fighting strong trends.
-*   **Z-Score Triggers**: Enters trades at statistical extremes (Standard Deviations > 2.5) from the Rolling VWAP.
-*   **RSI Confirmation**: Adds momentum confirmation to prevent catching falling knives.
-*   **Volatility Filters**: Skips trading during erratic volatility spikes (`Vol Slope` check).
-
-### 🛡️ Robust Risk Management
-*   **Dynamic Position Sizing**: Lot size is calculated automatically based on Volatility (ATR-like) and Account Risk %.
-*   **Hard Drawdown Stops**:
-    *   **Daily Stop**: Stops trading if daily loss exceeds `2%`.
-    *   **Total Equity Stop**: Halts the bot if total drawdown hits `10%`.
-*   **Risk:Reward**: Strict 1:2 R:R ratio enforced on every trade.
-
-### ⚙️ Precision Timing
-*   **Broker-Time Filters**: Session logic (Asian/London) runs on **Server Time**, making it immune to local computer timezone issues.
-*   **Heartbeat Monitor**: Logs "Waiting for candle..." updates to ensure the bot is alive during quiet periods.
-
----
+*   **Statistical Strategy**: Uses Z-Score deviations from a Rolling VWAP to find overextended price levels.
+*   **Regime Filtering**: Incorporates Hurst Exponent and Volatility Slope to filter out trending markets and trade only during favorable mean-reverting conditions.
+*   **Dynamic Entry/Exit**: Waits for confirmation ("Signal State Machine") before entering (e.g., waiting for Z-Score to hook back) and targets volatility-adjusted take-profits.
+*   **Risk Management**:
+    *   Dynamic Lot Sizing based on Account Risk % and Volatility-based Stop Loss.
+    *   Daily Drawdown Hard Stop (stops trading if daily loss exceeds a set limit).
+    *   Session Filtering (Trades only during specific sessions like Asian or London).
+*   **Robust Architecture**:
+    *   **Modular Design**: Separated concerns (Data Feed, Strategy, Execution, Risk, Validation).
+    *   **Resilient**: Handles connection drops, data delays, and daily resets automatically.
+    *   **Safe**: Checks for existing positions on startup and prevents double-entry.
 
 ## 📂 Project Structure
 
 ```text
-├── config/
-│   └── settings.yaml       # 🔧 All strategy, risk, and session parameters
-├── core/
-│   ├── mt5_connector.py    # MT5 Connection handling
-│   ├── data_feed.py        # Live & Historical Data fetching
-│   ├── execution.py        # Trade placement logic
-│   └── risk.py             # Position sizing & Drawdown checks
-├── strategy/
-│   └── mean_reversion.py   # 🧠 The Brain (Signal Logic)
-├── services/
-│   ├── trade_manager.py    # Monitors open trades & logs exits
-│   └── order_validator.py  # Final safety checks before execution
-├── utils/
-│   ├── helpers.py          # Timezone and Session logic
-│   ├── indicators.py       # Math (Hurst, Z-Score, VWAP)
+.
+├── config/                 # Configuration files
+│   ├── settings.yaml       # Main bot settings (Strategy, Risk, Sessions)
+│   └── symbols.yaml        # Symbol specific specs (contract size, lots)
+├── core/                   # Core system logic
+│   ├── mt5_connector.py    # MT5 connection handler
+│   ├── data_feed.py        # Fetches live candle data
+│   ├── execution.py        # Order placement and execution
+│   └── risk.py             # Position sizing and drawdown logic
+├── strategy/               # Trading Logic
+│   ├── mean_reversion.py   # Main Mean Reversion strategy implementation
+│   └── strategy_base.py    # Abstract base class
+├── services/               # Background services
+│   ├── trade_manager.py    # Manages open trades (trailing SL, partials)
+│   └── order_validator.py  # Validates trades before execution
+├── utils/                  # Helper functions
+│   ├── indicators.py       # TA Library (Z-Score, RSI, Hurst, VWAP)
+│   ├── session_filter.py   # Time-based session filters
 │   └── logger.py           # Logging configuration
-├── main.py                 # 🚀 LIVE Trading Entry Point
-└── backtest.py             # 🧪 Historical Simulation Entry Point
+├── logs/                   # Log output directory
+├── main.py                 # Entry point
+└── requirements.txt        # Python dependencies
 ```
 
----
+## 🛠️ Installation & Setup
 
-## 🛠️ Installation
+### Prerequisites
+1.  **Windows OS** (MT5 Python integration is Windows-native).
+2.  **MetaTrader 5 Terminal** installed and logged into a hedging account.
+3.  **Python 3.9+** installed.
 
-1.  **Prerequisites**:
-    *   **Python 3.8+** (Verified on 3.10/3.11).
-    *   **MetaTrader 5 Terminal** (Installed, Logged in, and "Algo Trading" Enabled).
-    *   **Windows OS** (Required for MT5 Python API).
+### Steps
+1.  **Clone the Repository**:
+    ```bash
+    git clone https://github.com/yourusername/mt5-trading-bot.git
+    cd mt5-trading-bot
+    ```
 
-2.  **Install Dependencies**:
-    The project includes a `requirements.txt` for easy setup.
+2.  **Create Virtual Environment** (Recommended):
+    ```bash
+    python -m venv venv
+    .\venv\Scripts\activate
+    ```
+
+3.  **Install Dependencies**:
     ```bash
     pip install -r requirements.txt
     ```
-    *Dependencies: `MetaTrader5`, `pandas`, `numpy`, `pyyaml`, `matplotlib`*
 
----
+4.  **Configure MT5**:
+    *   Open MetaTrader 5.
+    *   Go to **Tools** -> **Options** -> **Expert Advisors**.
+    *   Enable "Allow algorithmic trading".
 
-## ⚡ How to Run
+## ⚙️ Configuration
 
-### 1. Configure
-Edit `config/settings.yaml` to set your risk and hours.
-*   **Important**: Set `asian_start`/`end` based on your **Broker's Market Watch Time**, not your local time.
+The bot is fully configurable via `config/settings.yaml`.
 
-### 2. Live Trading
-Run the bot to start trading on your active MT5 account.
-```bash
-python main.py
-```
-*   *Logs are saved to `logs/bot.log`*
-*   *Strategy Snapshots are printed every candle.*
+**Key Parameters:**
+*   **Trading**: Symbol (`EURUSD`), Timeframe (`M1`), Risk Per Trade (e.g., `0.01` for 1%).
+*   **Strategy**:
+    *   `z_score_trigger`: Deviation required to look for a trade (e.g., `2.5`).
+    *   `hurst_threshold`: Max Hurst value to allow trading (filters trends).
+    *   `rsi_overbought/oversold`: RSI filters for entry confirmation.
+*   **Sessions**: Define start/end times for trading windows (Asian/London).
+*   **Risk**: `max_daily_drawdown_pct` sets the daily loss limit.
 
-### 3. Backtesting
-Run the simulation to verify performance on historical data (50,000 bars).
-```bash
-python backtest.py
-```
-*   *Prints detailed trade logs (Entry, Exit, PnL).*
-*   *Interactive Drawdown Reset if equity drops too low.*
+## ▶️ Usage
 
----
+1.  **Start MetaTrader 5**: Ensure your terminal is running and connected to the internet.
+2.  **Run the Bot**:
+    ```bash
+    python main.py
+    ```
+3.  **Operation**:
+    *   The bot will connect to MT5.
+    *   It will wait for the next candle close to process data.
+    *   Logs will be printed to the console and saved in `logs/bot.log`.
+    *   Use `Ctrl+C` to stop the bot safely.
 
-## 📊 Strategy Logic (Snapshot)
+## 📊 Strategy Details
 
-1.  **Check Regime**: Is `Hurst Exponent` < 0.45? (Market is ranging).
-2.  **Check Extremes**: Is Price `Z-Score` > 2.5 deviations from VWAP?
-3.  **Check Timing**: Is active Session (Asian/London) OPEN?
-4.  **Signal**: If all Yes -> **Wait for Retracement** to Zone (1.8) -> **EXECUTE**.
-
----
+The **Mean Reversion Strategy** operates on a refined state machine:
+1.  **Filter**: Checks if the market is in a "ranging" regime (Hurst < Threshold, Vol Slope low).
+2.  **Signal**: Checks if Price deviates significantly from VWAP (Z-Score > Trigger).
+3.  **Confirm**: Uses RSI to ensure the move is overextended.
+4.  **Wait**: Enters a "Pending" state, waiting for price to hook back towards the mean.
+5.  **Execute**: Enters trade when Z-Score starts returning to the mean (crossing Entry Target).
+6.  **Exit**: Target Profit is dynamic (Vol-Adjusted), or Hard Stop Loss is hit.
 
 ## ⚠️ Disclaimer
-*   Trading Forex/CFDs involves substantial risk of loss.
-*   Backtest results do not guarantee future performance.
-*   Always test on a **Demo Account** first.
+
+Trading Forex/CFDs involves significant risk. This software is for educational purposes only. Do not trade with money you cannot afford to lose. Always Backtest and Paper Trade before going live.

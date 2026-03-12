@@ -106,7 +106,13 @@ def main():
                 daily_start_balance = mt5.account_info().balance
                 current_day = now.day
                 trading_disabled_today = False
-                logger.info("New trading day started")
+
+                # 🔴 Reset strategy state for new day
+                pending_signal = None
+                wait_counter = 0
+
+                logger.info("New trading day started — trading re-enabled")
+
 
             # -------- Fetch Data --------
             df = data_feed.get_candles(n=500)
@@ -128,31 +134,11 @@ def main():
                 time.sleep(1)
                 continue
             last_candle_time = current_candle['time']
-
-            # Sync open position state
-            open_positions = mt5.positions_get(symbol=SYMBOL)
-            has_open_trade = bool(open_positions)
-
-            # -------- Drawdown Check (HARD STOP) --------
-            account = mt5.account_info()
-            if not trading_disabled_today:
-                if check_daily_drawdown(
-                    daily_start_balance,
-                    account.equity,
-                    CONFIG['trading']['max_daily_drawdown_pct']
-                ):
-                    logger.error("Max daily drawdown reached. Closing all positions.")
-                    trade_manager.close_all_positions()
-                    trading_disabled_today = True
-                    continue
-
-            if trading_disabled_today or has_open_trade:
-                continue
-
+            
             z = prev_candle['z_score']
             rsi = prev_candle['rsi']
             hurst = prev_candle['hurst']
-
+            
             # ===== STRATEGY SNAPSHOT (WHY NO TRADE) =====
             session_ok = check_trading_session(CONFIG, candle_time=current_candle['time'])
 
@@ -166,6 +152,36 @@ def main():
             )
             # ==========================================
 
+            # Sync open position state
+            open_positions = mt5.positions_get(symbol=SYMBOL)
+            has_open_trade = bool(open_positions)
+
+            # -------- Drawdown Check (HARD STOP) --------
+            account = mt5.account_info()
+            if not trading_disabled_today:
+                if check_daily_drawdown(
+                    daily_start_balance,
+                    account.equity,
+                    CONFIG['trading']['max_daily_drawdown_pct']
+                ):
+                    logger.error("Max daily drawdown reached. Trading DISABLED for today.")
+                    trade_manager.close_all_positions()
+
+                    trading_disabled_today = True
+
+                    # 🔴 CRITICAL: reset strategy state
+                    pending_signal = None
+                    wait_counter = 0
+
+                    continue
+
+            # 🧪 OPTIONAL (RECOMMENDED): visibility log
+            if trading_disabled_today:
+                logger.info("Trading disabled for today — monitoring only")
+
+
+            if trading_disabled_today or has_open_trade:
+                continue
             
             # -------- Session Filter --------
             if not check_trading_session(CONFIG, candle_time=current_candle['time']):
@@ -208,7 +224,7 @@ def main():
                 pending_signal = None
 
             # -------- Execute Trade --------
-            if signal and validator.validate(account, 0):
+            if signal and not trading_disabled_today and validator.validate(account, 0):
                 price = current_candle['close']
 
                 # EXACT backtest SL logic
@@ -241,7 +257,7 @@ def main():
             logger.info("Bot stopped manually")
             break
         except Exception as e:
-            logger.exception(f"Unexpected error: {e}")
+            tra.exception(f"Unexpected error: {e}")
             time.sleep(5)
 
     connector.disconnect()

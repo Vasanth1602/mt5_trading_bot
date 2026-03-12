@@ -27,9 +27,9 @@ class TradeManager:
             
             # Simple Logic: If Volatility Spike, Reduce Risk.
             if current_vol > 0.0005: # Threshold example
-                 logger.info(f"Volatility Spike on {symbol}. Managing position...")
-                 # Implement partial close or tight SL here
-                 pass
+                logger.info(f"Volatility Spike on {symbol}. Managing position...")
+                # Implement partial close or tight SL here
+                pass
 
             # Trailing SL or Breakeven logic could go here
             pass
@@ -57,7 +57,60 @@ class TradeManager:
                     if (datetime.now() - deal_time).total_seconds() < 15:
                         res = "WIN" if deal.profit > 0 else "LOSS"
                         logger.info(
-                            f"🏁 {res} | Ticket: {deal.position_id} | "
+                            f"{res} | Ticket: {deal.position_id} | "
                             f"Price: {deal.price:.5f} | PnL: ${deal.profit:.2f} | "
                             f"Comment: {deal.comment}"
                         )
+    def close_all_positions(self):
+        """
+        HARD STOP: Close all open positions created by this bot
+        (used for daily drawdown protection).
+        """
+        positions = mt5.positions_get()
+        if positions is None:
+            logger.warning("No open positions to close.")
+            return
+
+        for pos in positions:
+            # Only close positions opened by THIS bot
+            if pos.magic != self.magic:
+                continue
+
+            symbol = pos.symbol
+
+            tick = mt5.symbol_info_tick(symbol)
+            if tick is None:
+                logger.error(f"No tick data for {symbol}, cannot close position.")
+                continue
+
+            # Determine close order type & price
+            if pos.type == mt5.POSITION_TYPE_BUY:
+                order_type = mt5.ORDER_TYPE_SELL
+                price = tick.bid
+            else:
+                order_type = mt5.ORDER_TYPE_BUY
+                price = tick.ask
+
+            request = {
+                "action": mt5.TRADE_ACTION_DEAL,
+                "symbol": symbol,
+                "position": pos.ticket,
+                "volume": pos.volume,
+                "type": order_type,
+                "price": price,
+                "deviation": 20,
+                "magic": self.magic,
+                "comment": "Daily drawdown hard stop",
+            }
+
+            result = mt5.order_send(request)
+
+            if result.retcode != mt5.TRADE_RETCODE_DONE:
+                logger.error(
+                    f"Failed to close position {pos.ticket} | retcode={result.retcode}"
+                )
+            else:
+                logger.info(
+                    f"Closed position {pos.ticket} due to daily drawdown"
+                )
+
