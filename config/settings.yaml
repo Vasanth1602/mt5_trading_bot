@@ -34,3 +34,8 @@ filters:
   max_spread_pips: 2.0
   min_volatility_percentile: 0.2
   max_volatility_percentile: 0.8
+
+execution:
+  order_comment: "Mean Reversion Bot"
+  slippage_pips: 20
+  deviation: 20

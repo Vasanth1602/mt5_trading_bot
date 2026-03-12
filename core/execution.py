@@ -1,11 +1,16 @@
 import MetaTrader5 as mt5
+import yaml
 from utils.logger import setup_logger
 
 logger = setup_logger("Execution")
 
+# Load config
+with open("config/settings.yaml", "r") as f:
+    CONFIG = yaml.safe_load(f)
+
 class Executor:
-    def __init__(self, magic=123456):
-        self.magic = magic
+    def __init__(self, magic=None):
+        self.magic = magic if magic is not None else CONFIG['project']['magic_number']
 
     def place_trade(self, symbol, signal, volume, sl, tp, price=None, order_type="MARKET"):
         """
@@ -38,9 +43,10 @@ class Executor:
             "sl": float(sl),
             "tp": float(tp),
             "magic": self.magic,
-            "comment": "Antigravity Bot",
+            "comment": CONFIG['execution']['order_comment'],
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": mt5.ORDER_FILLING_IOC,
+            "deviation": CONFIG['execution']['deviation'],
         }
 
         result = mt5.order_send(request)
